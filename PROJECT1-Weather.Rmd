@@ -1,0 +1,535 @@
+---
+title: "Australian Weather Data"
+author: "490390494, 480555188, 490389568"
+subtitle: "Project 1 - Monday 9-11am Carslaw 353"
+date: "The University of Sydney | DATA1901 | March 2019"
+output:
+  html_document:
+    fig_caption: true
+    df_print: paged
+    number_sections: true
+    self_contained: true
+    theme: journal
+    css: 
+      - https://use.fontawesome.com/releases/v5.0.6/css/all.css
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    code_folding: hide
+---
+
+
+
+<br>
+
+# Executive Summary
+Aim of this report - to investigate trends in the Australian weather data from 2007-2017 and discuss the following research questions:
+
+ * Where is the most optimal location for agricultural production in Australia? 
+ * How does temperature vary in different climates across Australia? 
+ * Where is the ideal location for generating renewable energy in Australia?
+ 
+<br />
+
+Main discoveries:
+
+ * Darwin and Cairns are the most optimal locations for agricultural production in Australia
+ * There are distinct temperature trends for temperate sub-tropical, hot desert and tropical savanna climates
+ * Woomera and Darwin are the most ideal location for generating wind and solar renewable energy in Australia
+
+
+
+<br>
+
+<br>
+
+# Initial Data Analysis (IDA)
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+#Loading required packages without warnings or messages
+require(knitr)
+require(magrittr)
+require(kableExtra)
+require(tidyverse)
+require(plotly)
+require(dplyr)
+require(caret)
+require(psych)
+```
+
+
+
+## A Glimpse of the Data Set
+
+```{r}
+# Loading weather data from local .csv file
+weather = read.csv("data/weatherAUS.csv")
+
+# Quick look at top 6 rows of data
+kable(head(weather), "html") %>%
+    kable_styling(bootstrap_options = c("striped", "hover")) %>%
+    scroll_box(width = "100%")
+```
+
+
+
+<br>
+
+## Assessing R's Classication of the Variables 
+
+```{r}
+# Size of the data and R's classification of the variables
+str(weather)
+```
+
+We only disagree with two of the above variables' classifications.
+
+
+<br>
+
+### The Date Variable
+
+```{r}
+str(weather$Date)
+```
+
+The 'Date' variable should be expressed as a POSIXct (Portable Operating System Interface calendar time) Date object instead of being a factor with over 3000 levels.
+
+<br />
+
+Let's format it as a Date object:
+
+```{r}
+format_date = as.Date(weather$Date)
+str(format_date)
+```
+
+<br />
+
+As a result, more useful information such as the day of the week and the name of the month can be extracted. Let's look at on which days and months the first 6 observations occurred:
+
+```{r}
+# Day of the week
+head(format(format_date, "%A"))
+
+# Abbreviated month
+head(format(format_date, "%b"))
+```
+
+
+<br>
+
+### The RainToday & RainTomorrow Variables
+
+```{r}
+str(weather$RainToday)
+str(weather$RainTomorrow)
+```
+
+As seen above, RainToday and RainTomorrow are factors with two levels: "Yes" or "No". However, this better expressed as a logical type (or Boolean, i.e. TRUE or FALSE).
+
+<br />
+
+Let's format them such that the ```str()``` function outputs the following:
+
+```{r}
+# Changing RainToday to a logical type
+levels(weather$RainToday)[1] = FALSE
+levels(weather$RainToday)[2] = TRUE
+logi_rain_today = as.logical(weather$RainToday)
+str(logi_rain_today)
+
+# Changing RainTomorrow to a logical type
+levels(weather$RainTomorrow)[1] = FALSE
+levels(weather$RainTomorrow)[2] = TRUE
+logi_rain_tomorrow = as.logical(weather$RainTomorrow)
+str(logi_rain_tomorrow)
+```
+
+
+
+<br>
+
+## Initial Questions About the Data
+
+*What is the spread of each variable?*
+
+```{r}
+# Looking at the spread of the data
+summary(weather)
+```
+
+<br />
+
+*How large is the data set?*
+
+```{r}
+# Looking at the dimensions of the data
+dim(weather)
+```
+
+It contains 142 193 rows (observations) and 24 columns (variables).
+
+<br />
+
+*Over what period of time does the data set span?*
+
+```{r}
+# Finding the initial and final weather observations
+min(as.Date(weather$Date))
+max(as.Date(weather$Date))
+```
+
+It was collected between November 2007 and June 2017.
+
+<br />
+
+*Which locations are used? How many are there?*
+
+```{r}
+# Finding the names of each location, sorted in alphabetical order
+sort(unique(weather$Location))
+```
+
+From above, 49 locations in Australia are used spanning from Adelaide to Woomera.
+
+
+
+<br />
+
+## Source of the Data
+
+The data was obtained from [kaggle](https://www.kaggle.com/jsphyg/weather-dataset-rattle-package) but it originates from the Australian Government Bureau of Meteorology's [website](http://www.bom.gov.au/climate/data/). It is a combination of two separate data sets on [daily weather records](http://www.bom.gov.au/climate/dwo/) and [climate data]( http://www.bom.gov.au/climate/data).
+
+**Each row** represents a new weather observation while **each column** represents the properties of the weather observations.
+
+
+
+<br />
+
+## Possible issues with the data
+
+The data was combined from two separate data sets; one recording daily observations and the other, climate data. Without knowing how the two were combined, the data's validity comes into question.
+
+In spite of this, the data's origins in the Australian Government do suggest a high degree of validity.
+
+Other possible issues include gaps in the table where a valid observation is not available due to confounding factors (such as a failure in observing equipment). These gaps are populated as NA's, reducing the diversity of the data set.
+
+
+
+<br />
+
+## Assesing Stakeholders
+
+Possible stakeholders include:
+
+* Governments: Being informed on climate trends in order to institute environmental policy and anti-climate change measures.
+* Agriculture: Monitoring rain seasons and temperature and how it changes over time is important for crop growth and animal rearing.
+* Tourism: Large changes in the climate for some areas may make certain tourist activities unsuitable or undesirable.
+* Insurance: A change in climate for some areas may increase the insurance risk for financial companies and thus influence the pricing of insurance policies.
+* Individuals: In considering where they might live an individual may favour locations where they can generate enough renewable energy to subsist or perhaps enjoy a tropical climate.
+
+
+
+<br />
+
+## Domain knowledge
+
+**Weather** describes a combination of certain meteorological factors such as rainfall, temperature, humidity, wind speed, wind direction. While weather defines a short period of time, **climate** is used to describe the long term patterns in weather conditions for a certain region.
+
+Climate and weather data is incredibly important and impactful on a wide range of industries including agriculture, tourism, and renewable energy. By observing climate data over periods of time, we can analyse trends and predict future climate behaviour. We can then, subsequently, apply this research to specific industries in order to optimise output efficiency.
+
+
+
+<br>
+
+<br>
+
+# Research Questions
+
+## Where is the most optimal location for agricultural production in Australia? 
+
+What makes a location good for agricultural production?
+
+ *	Consistent rainfall
+ *	Plenty of sunshine
+ *	Protection from natural disasters
+
+```{r}
+# Creating a data set that summarises each location by its chance of receiving rainfall
+percent_rain_data = weather %>% 
+  group_by(Location) %>% 
+  summarise(percent_rain = mean(RainToday == "TRUE", na.rm = TRUE)*100)
+
+# Bar plot to show the chance of a rainy day in each location
+chance_rain = plot_ly(percent_rain_data, x = ~reorder(Location,-percent_rain), y = ~percent_rain, type = "bar", color = I("rgba(0,128,128,0.9)")) %>%
+  layout(title = "Chance of a Rainy Day Across Australia", xaxis = list(title="Location"), yaxis = list(title="Percentage (%)"))
+chance_rain
+```
+
+From the bar plot above, the top five most consistent locations for rainfall in Australia appear to be:
+
+ 1. Portland
+ 2. Walpole
+ 3. Cairns
+ 4. Dartmoor
+ 5. Northfolk Island
+ 
+<br />
+
+However, we should look at the amount of rainfall received by these locations on rainy days. This is represented below:
+
+```{r}
+# Creating a data set that summarises each location by its average rainfall on rainy days
+mean_rain_data = weather %>%
+  group_by(Location) %>%
+  filter(Rainfall > 0) %>%
+  summarise(mean_rainfall = mean(Rainfall))
+
+# Bar plot to show the average rainfall in each location on rainy days
+mean_rain = plot_ly(mean_rain_data, x = ~reorder(Location, -mean_rainfall), y = ~mean_rainfall, type ="bar", color = I("rgba(0,128,128,0.9)")) %>%
+  layout(title = "Average Rainfall on Rainy Days Across Australia", xaxis = list(title = "Location"), yaxis = list(title = "Mean Rainfall (mm)"))
+mean_rain
+
+# Creating a data set that summaries each location by its median rainfall on rainy days
+median_rain_data = weather %>%
+  group_by(Location) %>%
+  filter(Rainfall > 0) %>%
+  summarise(median_rainfall = median(Rainfall))
+
+# Bar plot to show the median rainfall in each location on rainy days
+median_rain = plot_ly(median_rain_data, x = ~reorder(Location, -median_rainfall), y = ~median_rainfall, type = "bar", color = I('rgba(0,128,128,0.9)')) %>%
+  layout(title = "Median Rainfall on Rainy Days Across Australia", xaxis = list(title = "Location"), yaxis = list(title = "Median Rainfall (mm)"))
+median_rain
+```
+
+According to the two bar plots above, three locations consistently appear in the top five locations for both their mean and median rainfall. These are:
+
+ 1. Darwin
+ 2. Katherine
+ 3. Cairns
+ 
+However, it appears that although Katherine receives high rainfall on rainy days, it only rains on average for 17% of days each year. Thus, it is highly inconsistent and cannot be regarded as an ideal location for farming.
+
+On the other hand Darwin rains on average 27% of days each year with a median rainfall of 7.4mm, making it very a consistent location for high rainfall. Furthermore, Cairns appears from out previous bar plot, ranking as the 3rd most consistent location for rainfall at 32% of days each year on average. 
+
+Yet, an optimal location for agricultural production also requires plenty of sunshine:
+
+```{r, warning = FALSE}
+# Box plot to show the number of hours of bright sunshine by location
+sunshine = plot_ly(weather, x = ~Sunshine, y = ~Location, type = "box", color = ~Location, marker = list(size = 5, opacity = 0.2)) %>%
+  layout(title = 'Sunshine Across Australia From 2007-2017', yaxis = list(title = 'Locations', autorange = TRUE, categoryorder = "category descending", title = "Locations"), xaxis = list(title = 'Sunshine (Hours per Day)'))
+sunshine
+```
+
+From the box plot representing hours of sunshine across Australia, notice that Darwin has a relatively high median hours of sunshine a day at 10 hours, and a reasonably low IQR (Interquartile Range) of 4 hours, indicating a consistent large number of hours of sunshine per day. Furthermore, Cairns also has a high median number of hours of sunshine per day at 8.6 hours, alongside an adequate IQR of 5.5 hours.
+
+This would further suggest that Darwin and Cairns would be very optimal locations for agriculture in Australia, and indeed perhaps the most favourable.
+
+However, other factors must also be considered. One such factor would be the built-up nature of Darwin's topography and the subsequent lack of available free land for agriculture. Another factor is the possibility of flash flooding, evident in Darwin with one day in 2011 receiving 367.6mm of rain, the 2nd highest amount of rainfall in one day  in Australia over the last 10 years.
+
+Similarly, Cairns must also be assessed more deeply. Like most of North Queensland, Cairns is prone to tropical cyclones which, again, would heavily influence the decision of whether or not to implement agricultural endeavours in the region.
+
+
+
+<br>
+
+## How does temperature vary in different climates across Australia?
+
+To best address this question, we shall analyse the data obtained from Sydney, Alice Springs and Darwin since they represent significantly different geographical locations across Australia: temperate sub-tropical, hot desert and tropical savanna climates respectively.
+
+```{r}
+# Creating a data set that splits the date column into year, month and day
+date_split_data = weather %>%
+  tidyr::separate(col = Date,
+                  into = c("year", "month", "day"),
+                  sep = "-")
+
+# Adding a column for the average temperature
+date_split_data = mutate(date_split_data, mean_temp = (MaxTemp+MinTemp)/2)
+
+# Adding a column for the day of the week
+day_name = format(as.Date(weather$Date), "%A")
+date_split_data = cbind(date_split_data, day_name)
+
+# Added a column for the month name as a factor
+month_name = format(as.Date(weather$Date), "%B")
+date_split_data = cbind(date_split_data, month_name)
+
+# Reordering the columns
+date_split_data = date_split_data[, c(1, 2, 29, 3, 28, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27)]
+
+# Ordering the month coloumn
+date_split_data$month_name = factor(date_split_data$month_name, c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))
+
+
+
+# Creating a data set that summarises each location by its average monthly temperature 
+mean_temp_month_data = date_split_data %>%
+  group_by(Location, year, month_name) %>%
+  summarise(mean_temp_month = mean(mean_temp, na.rm = "True"))
+
+
+
+# Line chart to show fluctuations in the average monthly temperature each year for Sydney
+mean_temp_sydney = plot_ly(mean_temp_month_data, x = ~month_name, y = ~mean_temp_month, color = ~year, text = ~Location, hoverinfo = "text") %>%
+  filter(Location == "Sydney") %>%
+  add_trace(type = "scatter", mode = "lines", line = list(shape = "spline"), colors = c("#edf8b1", "#7fcdbb", "#2c7fb8")) %>%
+  layout(title = "Average Temperature in Sydney Per Month", xaxis = list(title = "Month", range = c(0,11)), yaxis = list(title = "Mean Temperature (°C)", range = c(0,35)))
+mean_temp_sydney
+```
+
+Sydney is a **temperate sub-tropical** climate.
+
+According to the line chart above these are characterised by a gradual change in temperature throughout the year from 13-25°C rather than extreme seasonal differences. This temperature moderation is likely due to Sydney's proximity to the ocean. In fact, over time this trend appears highly consistent with minor fluctuations between years.
+
+Indeed a **temperate sub-tropical** climate is known to exhibit a gradual shift between mild winters and warm summers, with the shape of the annual temperature graph indicating four distinct seasons. 
+
+```{r}
+# Line chart to show fluctuations in the average monthly temperature each year for Alice Springs
+mean_temp_alicesprings = plot_ly(mean_temp_month_data, x = ~month_name, y = ~mean_temp_month, color = ~year, text = ~Location, hoverinfo = "text") %>%
+  filter(Location == "AliceSprings") %>%
+  add_trace(type = "scatter", mode = "lines", line = list(shape = "spline"), colors = c("#ffeda0", "#feb24c", "#f03b20")) %>%
+  layout(title = "Average Temperature in Alice Springs Per Month", xaxis = list(title = "Month", range = c(0,11)), yaxis = list(title = "Mean Temperature (°C)", range = c(0,35)))
+mean_temp_alicesprings
+```
+
+Alice Springs is a **hot desert** climate
+
+From the line chart above, this climate appears to be identified by high average temperatures in summer, and low temperatures in winter. Indeed a greater spread in temperature values from 9-30°C reflects this characteristic.
+
+In fact, a **hot desert** climate portrays such a temperature-time graph, portraying a four-season trend with significant seasonal differences and a hence a steeper curve.
+
+```{r}
+# Line chart to show fluctuations in the average monthly temperature each year for Darwin
+mean_temp_darwin = plot_ly(mean_temp_month_data, x = ~month_name, y = ~mean_temp_month, color = ~year, text = ~Location, hoverinfo = "text") %>%
+  filter(Location == "Darwin") %>%
+  add_trace(type = "scatter", mode = "lines", line = list(shape = "spline"), colors = c("#e7e1ef", "#c994c7", "#dd1c77")) %>%
+  layout(title = "Average Temperature in Darwin Per Month", xaxis = list(title = "Month", range = c(0,11)), yaxis = list(title = "Mean Temperature (°C)", range = c(0,35)))
+mean_temp_darwin
+```
+
+Darwin possesses a **tropical savanna** climate.
+
+According to the line chart above, this type of climate appears to have much less distinct seasons. This is evident in the very high average temperature that persists throughout the year for Darwin with little variation, only ranging from 23-30°C. 
+
+In fact, instead of having four distinct seasons, a **tropical savanna** climate has distinct wet and dry seasons. 
+
+This characteristic is evident below:
+
+```{r}
+# Changing RainToday to logical type
+levels(date_split_data$RainToday)[1] = FALSE
+levels(date_split_data$RainToday)[2] = TRUE
+date_split_data = date_split_data %>%
+  mutate(RainToday, RainToday = as.logical(RainToday))
+
+# Changing RainTomorrow to logical type
+levels(weather$RainTomorrow)[1] = FALSE
+date_split_data = date_split_data %>%
+  mutate(RainTomorrow, RainTomorrow = as.logical(RainTomorrow))
+
+# Creating a data set
+daily_summary = date_split_data %>%
+  group_by(Location, year, month_name) %>%
+  summarise(mean_daily_rain = mean(Rainfall, na.rm=TRUE), 
+            median_daily_rain = median(Rainfall, na.rm = TRUE), 
+            total_monthly_rain = sum(Rainfall, na.rm = TRUE),
+            max_daily_rain = max(Rainfall, na.rm=TRUE),
+            min_daily_rain = min(Rainfall, na.rm=TRUE),
+            mean_max_temp = mean(MaxTemp, na.rm=TRUE),
+            mean_min_temp = mean(MinTemp, na.rm=TRUE),
+            median_max_temp = median(MaxTemp, na.rm=TRUE),
+            median_min_temp = median(MinTemp, na.rm=TRUE),
+            max_daily_temp = max(MaxTemp, na.rm=TRUE),
+            min_daily_temp = min(MinTemp, na.rm=TRUE),
+            median_con_rain = median(rle(RainToday)$lengths[rle(RainToday)$values==TRUE], na.rm=TRUE))
+
+
+# Bar plot of the mean rainfall for each month in Darwin
+darwin_weather = subset(daily_summary, Location == "Darwin")
+ggplot(darwin_weather, aes(x = month_name, y = mean_daily_rain, fill = year)) + geom_bar(stat = "identity") + ggtitle("Average Rainfall per Month in Darwin") + xlab("Month") + ylab("Rainfall (mm)") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+
+<br>
+
+## Where is the ideal location for generating renewable energy in Australia?
+
+```{r, warning = FALSE}
+# Creating a data set that adds a column for the average wind speed in each observation
+mean_wind_speed_data = weather %>%
+  mutate(mean_wind_speed = (WindSpeed3pm + WindSpeed9am)/2)
+
+# Box plot to show the average wind speed by location
+wind_speed = plot_ly(mean_wind_speed_data, y = ~mean_wind_speed, x = ~Location, type = "box", color = ~Location, marker = list(size = 3, opacity = 0.9)) %>%
+  layout(title = "Average Wind Speed Across Australia From 2007-2017", yaxis = list(title = "Wind Speed (km/hr)"), xaxis = list(title = "Locations"))
+wind_speed
+```
+
+Despite the consistency of wind speed across locations, based on the comparative box plot above, through considering the median and IQR it appears that the most ideal locations for generating wind powered energy would be:
+
+ 1. Sydney Airport 
+ 2. Melbourne
+ 3. Woomera
+ 4. Darwin
+ 5. Norfolk Island
+ 
+However, for Sydney Airport it is in practicality unrealistic to develop a system of wind turbines and the like in such a congested location. Hence we shall disregard these locations.
+
+Similarly, we can also disregard Mount Gamier and Norfolk Island due to the technical challenge of setting up a wind turbine system on a tall mountain and a small island respectively.
+
+Melbourne, Woomera and Darwin still seem appealing locations, yet Woomera would indeed have a lot more free land to construct wind turbines on.
+
+Now let's consider sunshine as well:
+
+```{r, warning = FALSE}
+# Creating a data set that summarises each location by its median sunshine and wind speed
+median_sunshine_and_wind_speed_data = mean_wind_speed_data %>%
+  group_by(Location) %>%
+  summarise(median_sunshine = median(Sunshine, na.rm = "True"), median_wind_speed = median(mean_wind_speed, na.rm = "True"))
+
+# Scatter plot to show the number of median hours of bright sunshine against median wind gust speed
+sunshine_wind_speed = plot_ly(median_sunshine_and_wind_speed_data, x =~median_wind_speed, y = ~median_sunshine, type = "scatter", mode = "markers", color = ~Location) %>%
+  layout(title = 'Median Hours of Sunshine VS Median Wind Speed', yaxis = list(title = 'Median Hours of Sunshine per Day', autorange = TRUE, categoryorder = "category descending", title = "Locations"), xaxis = list(title = 'Median Wind Speed (km/h)'))
+sunshine_wind_speed
+```
+
+According to the scatter plot above, Woomera is the most ideal location for generating renewable energy with 10 median hours of sunshine per day and a median wind speed of 19.5 km/h. 
+
+In fact, despite having a median wind speed of 18.5 km/h, Melbourne appears to have only 6.7 median hours of sunshine per day, revealing its lacking potential for reaping solar energy from the Sun.
+
+Yet, Darwin also seems quite ideal, with a median wind speed of 17.5 km/h and 10 median hours of sunshine per day. In fact, it has a much smaller IQR of 6.5 km/h in comparison to 10.5 km/h for Woomera.
+
+<br />
+
+Thus, considering all the factors, it appears that Woomera and Darwin are the most ideal locations for generating renewable energy in Australia.
+
+
+
+<br>
+
+# Session Info
+
+```{r}
+
+sessionInfo()
+
+```
+
+
+
+<br>
+
+# References
+
+Kaggle.com. (2019). Rain in Australia. [online] Available at: https://www.kaggle.com/jsphyg/weather-dataset-rattle-package [Accessed 13 Mar. 2019].
+
+Bom.gov.au. (2019). Climate Data Online. [online] Available at: http://www.bom.gov.au/climate/data/?fbclid=IwAR2CLU4ge5DcxbXfRBPA0hshBijbCXu6oir2B7hNZAL5WMSY0SGlIeXzklI [Accessed 13 Mar. 2019].
+
+Weatheronline.co.uk. (2019). Climate of the World: Australia | weatheronline.co.uk. [online] Available at: https://www.weatheronline.co.uk/reports/climate/Australia.htm [Accessed 13 Mar. 2019].
+
+Colorbrewer2.org. (2019). ColorBrewer: Color Advice for Maps. [online] Available at: http://colorbrewer2.org/?fbclid=IwAR1v0BXFZsss_fEZ0TaI74MOarltAPJZWz-KivgKQp7CiGaUeQc7J-piFkE#type=qualitative&scheme=Set1&n=3 [Accessed 20 Mar. 2019].
+
+19january2017snapshot.epa.gov. (2019). Climate Impacts on Agriculture and Food Supply | Climate Change Impacts | US EPA. [online] Available at: https://19january2017snapshot.epa.gov/climate-impacts/climate-impacts-agriculture-and-food-supply_.html [Accessed 16 Mar. 2019].
